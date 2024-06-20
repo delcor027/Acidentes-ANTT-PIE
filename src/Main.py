@@ -1,55 +1,52 @@
 import os
-import requests
-from lxml import html
 import pandas as pd
+from sqlalchemy import create_engine
+from sqlalchemy.engine import URL
+from unidecode import unidecode
 
-repositorio_csv = r'C:\Users\Matheus Delcor\Documents\Code\Python\DataSynth\database'
+# Diretório onde os arquivos CSV estão localizados
+csv_directory = r'C:\Users\Matheus Delcor\Documents\Code\Python\DataSynth\database'
 
-if not os.path.exists(repositorio_csv):
-    os.makedirs(repositorio_csv)
+# Configuração da conexão SQLAlchemy para SQL Server com autenticação do Windows
+connection_string = URL.create(
+    "mssql+pyodbc",
+    query={
+        "odbc_connect": (
+            'DRIVER={ODBC Driver 17 for SQL Server};'
+            'SERVER=localhost;'
+            'DATABASE=PRF;'
+            'Trusted_Connection=yes;'
+        )
+    }
+)
+engine = create_engine(connection_string, fast_executemany=True)
 
-url_antt = 'https://dados.antt.gov.br/dataset/acidentes-rodovias'
+def process_csv(file_path, table_name, schema):
+    # Leitura do CSV com a codificação 'ISO-8859-1'
+    df = pd.read_csv(file_path, delimiter=';', encoding='ISO-8859-1')
+    print(f"Arquivo {file_path} lido com sucesso usando encoding 'ISO-8859-1'.")
 
-with requests.Session() as session:
-    resposta = session.get(url_antt)
+    # Aplicar unidecode para remover acentuações e caracteres estranhos
+    df = df.map(lambda x: unidecode(str(x)) if isinstance(x, str) else x)
 
-    if resposta.status_code == 200:
-        pagina = html.fromstring(resposta.text)
-        lista = pagina.xpath('//*[@id="dataset-resources"]/ul/li')
+    # Insere os dados na tabela correspondente usando SQLAlchemy
+    try:
+        df.to_sql(table_name, con=engine, schema=schema, if_exists='append', index=False)
+        print(f"Dados do arquivo {file_path} inseridos com sucesso na tabela {schema}.{table_name}.")
+    except Exception as e:
+        print(f"Erro durante a inserção dos dados do arquivo {file_path}: {e}")
 
-        dataframes = []  # Lista para armazenar os DataFrames
+# Definições dos arquivos e tabelas correspondentes
+files_to_tables = {
+    'acidentes2024_todas_causas_tipos.csv': 'ACIDENTES_TODAS_CAUSAS',
+    'ocorrencias.csv': 'OCORRENCIAS',
+    'pessoas.csv': 'PESSOAS'
+}
 
-        for indice, lista_de_elemento in enumerate(lista, start=1):
-            links_dos_arquivos = lista_de_elemento.xpath('./div/ul/li[2]/a/@href')
-            concessionaria = lista_de_elemento.xpath('./a/@title')[0]
-            concessionaria = concessionaria.replace("Demonstrativos de Acidentes - ", "")
-
-            for arquivos in links_dos_arquivos:
-                nome_do_arquivo = arquivos.split('/')[-1]
-                if nome_do_arquivo.lower().endswith('.csv'):
-                    resposta = session.get(arquivos)
-
-                    if resposta.status_code == 200:
-                        caminho_completo = os.path.join(repositorio_csv, nome_do_arquivo)
-                        with open(caminho_completo, 'wb') as arquivo:
-                            arquivo.write(resposta.content)
-
-                        print(f'Arquivo {nome_do_arquivo} baixado com sucesso do índice {indice}.')
-
-                        try:
-                            df = pd.read_csv(caminho_completo, encoding='latin1', delimiter=';', dtype={'coluna2': str}, low_memory=False)
-                        except UnicodeDecodeError:
-                            df = pd.read_csv(caminho_completo, encoding='utf-8', delimiter=';', dtype={'coluna2': str}, low_memory=False)
-
-                        df.insert(0, 'concessionaria', concessionaria)
-                        dataframes.append(df)
-                    else:
-                        print(f'Falha ao baixar o arquivo {nome_do_arquivo} do índice {indice}.')
-                else:
-                    print(f'Arquivo {nome_do_arquivo} não é um arquivo CSV ou não atende às condições.')
-
-        df_final = pd.concat(dataframes, ignore_index=True)
-        df_final.to_csv(os.path.join(repositorio_csv, 'demostrativo_acidentes.csv'), encoding='latin1', index=False, sep=';')
-
+# Processar cada arquivo CSV conforme a tabela correspondente
+for filename, table_name in files_to_tables.items():
+    file_path = os.path.join(csv_directory, filename)
+    if os.path.exists(file_path):
+        process_csv(file_path, table_name, 'BRONZE')
     else:
-        print(f'Falha ao acessar a página: {url_antt}')
+        print(f"Arquivo {file_path} não encontrado.")
