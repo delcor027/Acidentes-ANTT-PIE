@@ -24,7 +24,7 @@ def main():
     except ExtractionComplete:
         print("Finalizando extração de arquivos, continuando com as próximas etapas.")
     
-    # Etapa 2: Processar e carregar os dados na camada bronze
+    # Etapa 2: Processar os arquivos e carregar (ingestão) os dados na camada bronze
     base_directory = os.path.join(os.getcwd(), 'database')
     connection_string = URL.create(
         "mssql+pyodbc",
@@ -41,7 +41,7 @@ def main():
     layer_bronze = LayerBronze(base_directory, connection_string)
     layer_bronze.process_all_folders()
 
-    # Etapa 3: Processar e carregar os dados na camada silver
+    # Etapa 3: Processar, transformar, normalizar e carregar os dados na camada silver
     layer_silver = LayerSilver(connection_string)
     layer_silver.process_all_tables()
 
