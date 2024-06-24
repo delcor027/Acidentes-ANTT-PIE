@@ -3,83 +3,119 @@ import duckdb
 from sqlalchemy import create_engine
 
 class DataCleaner:
+    """
+    Classe estática responsável pela limpeza de dados.
+
+    Métodos Estáticos:
+        clean_sex_column(df): Substitui valores indesejados na coluna 'sexo' por None.
+        clean_specific_values(df): Substitui valores indesejados na coluna 'anoFabricacaoVeiculo' por None.
+        clean_all(df): Aplica todas as funções de limpeza no DataFrame.
+    """
+
     @staticmethod
     def clean_sex_column(df):
+        """
+        Substitui valores indesejados na coluna 'sexo' por None.
+
+        Parâmetros:
+            df (pandas.DataFrame): O DataFrame a ser limpo.
+
+        Retorna:
+            pandas.DataFrame: O DataFrame com a coluna 'sexo' limpa.
+        """
         if 'sexo' in df.columns:
             df['sexo'] = df['sexo'].replace(['Ignorado', 'Não Informado'], None)
         return df
 
     @staticmethod
     def clean_specific_values(df):
-        columns_to_check = ['anoFabricacaoVeiculo', 'anoFabricacao_veiculo']
-        for col in columns_to_check:
-            if col in df.columns:
-                df[col] = df[col].replace(['1917', '1901', '1900', '0'], None)
+        """
+        Substitui valores indesejados na coluna 'anoFabricacaoVeiculo' por None.
+
+        Parâmetros:
+            df (pandas.DataFrame): O DataFrame a ser limpo.
+
+        Retorna:
+            pandas.DataFrame: O DataFrame com a coluna 'anoFabricacaoVeiculo' limpa.
+        """
+        if 'anoFabricacaoVeiculo' in df.columns:
+            df['anoFabricacaoVeiculo'] = df['anoFabricacaoVeiculo'].replace([1917, 1901, 1900, 0], None)
         return df
 
     @staticmethod
     def clean_all(df):
+        """
+        Aplica todas as funções de limpeza no DataFrame.
+
+        Parâmetros:
+            df (pandas.DataFrame): O DataFrame a ser limpo.
+
+        Retorna:
+            pandas.DataFrame: O DataFrame limpo.
+        """
         df = DataCleaner.clean_sex_column(df)
         df = DataCleaner.clean_specific_values(df)
         return df
 
 
 class LayerSilver:
+    """
+    Classe responsável por processar e transformar dados da camada BRONZE para a camada SILVER do banco de dados.
+
+    Atributos:
+        engine (sqlalchemy.engine.base.Engine): A engine de conexão com o banco de dados.
+        conn (duckdb.DuckDBPyConnection): Conexão DuckDB em memória.
+    """
+    
     def __init__(self, connection_string):
+        """
+        Inicializa a classe LayerSilver com a string de conexão.
+
+        Parâmetros:
+            connection_string (str): A string de conexão para o banco de dados.
+        """
         self.engine = create_engine(connection_string, fast_executemany=True)
         self.conn = duckdb.connect(':memory:')
 
     def load_data(self, table_name):
+        """
+        Carrega dados da tabela BRONZE especificada.
+
+        Parâmetros:
+            table_name (str): O nome da tabela BRONZE.
+
+        Retorna:
+            pandas.DataFrame: O DataFrame com os dados carregados.
+        """
         query = f"SELECT * FROM BRONZE.{table_name}"
         df = pd.read_sql(query, self.engine)
         return df
 
-    def rename_columns_acidentes_todas_causas(self, df):
-        df.columns = [
-            'idOcorrencias', 'idPessoas', 'data', 'diaSemana', 'horario', 'uf', 'br', 'km', 'municipio',
-            'causaPrincipal', 'causaAcidente', 'ordemTipoAcidente', 'tipoAcidente', 'classificacaoAcidente',
-            'faseDia', 'sentidoVia', 'condicaoMetereologica', 'tipoPista', 'tracadoVia', 'usoSolo', 'idVeiculo',
-            'tipoVeiculo', 'marca', 'anoFabricacaoVeiculo', 'tipoEnvolvido', 'estadoFisico', 'idade', 'sexo',
-            'ilesos', 'feridosLeves', 'feridosGraves', 'mortos', 'latitude', 'longitude', 'regional', 'delegacia', 'uop'
-        ]
-        return df
+    def process_and_transform_data(self, table_name):
+        """
+        Processa e transforma dados de uma tabela BRONZE específica.
 
-    def rename_columns_ocorrencias(self, df):
-        df.columns = [
-            'idOcorrencias', 'data', 'diaSemana', 'horario', 'uf', 'br', 'km', 'municipio', 'causaAcidente',
-            'tipoAcidente', 'classificacaoAcidente', 'faseDia', 'sentidoVia', 'condicaoMetereologica', 'tipoPista',
-            'tracadoVia', 'usoSolo', 'pessoas', 'mortos', 'feridosLeves', 'feridosGraves', 'ilesos', 'ignorados',
-            'feridos', 'veiculos', 'latitude', 'longitude', 'regional', 'delegacia', 'uop'
-        ]
-        return df
+        Parâmetros:
+            table_name (str): O nome da tabela BRONZE.
 
-    def rename_columns_pessoas(self, df):
-        df.columns = [
-            'idPessoas', 'idOcorrencias', 'data', 'diaSemana', 'horario', 'uf', 'br', 'km', 'municipio',
-            'causaAcidente', 'tipoAcidente', 'classificacaoAcidente', 'faseDia', 'sentidoVia', 'condicaoMetereologica',
-            'tipoPista', 'tracadoVia', 'usoSolo', 'idVeiculo', 'tipoVeiculo', 'marca', 'anoFabricacao_veiculo',
-            'tipoEnvolvido', 'estadoFisico', 'idade', 'sexo', 'ilesos', 'feridosLeves', 'feridosGraves', 'mortos',
-            'latitude', 'longitude', 'regional', 'delegacia', 'uop'
-        ]
-        return df
-
-    def process_and_transform_data(self, table_name, rename_func):
-        # Carregar dados do SQL Server
+        Retorna:
+            pandas.DataFrame: O DataFrame transformado.
+        """
         df = self.load_data(table_name)
-
-        # Renomear colunas
-        df = rename_func(df)
-
-        # Limpar dados
         df = DataCleaner.clean_all(df)
-
-        # Inserir os dados transformados de volta em DuckDB
         self.conn.execute(f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM df")
         transformed_df = self.conn.execute(f"SELECT * FROM {table_name}").df()
-
         return transformed_df
 
     def insert_data_to_sql_server(self, df, table_name, chunksize=500000):
+        """
+        Insere dados transformados na tabela SILVER do banco de dados.
+
+        Parâmetros:
+            df (pandas.DataFrame): O DataFrame a ser inserido.
+            table_name (str): O nome da tabela SILVER.
+            chunksize (int): O tamanho dos chunks para inserção de dados.
+        """
         try:
             total_rows = len(df)
             for i, chunk in enumerate(range(0, total_rows, chunksize)):
@@ -90,14 +126,14 @@ class LayerSilver:
             print(f"Erro durante a inserção dos dados na tabela SILVER.{table_name}: {e}")
 
     def process_all_tables(self):
-        # Processar e transformar dados da tabela OCORRENCIAS
-        transformed_df = self.process_and_transform_data('OCORRENCIAS', self.rename_columns_ocorrencias)
+        """
+        Processa e transforma dados de todas as tabelas BRONZE especificadas.
+        """
+        transformed_df = self.process_and_transform_data('PESSOAS')
+        self.insert_data_to_sql_server(transformed_df, 'PESSOAS')        
+
+        transformed_df = self.process_and_transform_data('OCORRENCIAS')
         self.insert_data_to_sql_server(transformed_df, 'OCORRENCIAS')    
 
-        # Processar e transformar dados da tabela PESSOAS
-        transformed_df = self.process_and_transform_data('PESSOAS', self.rename_columns_pessoas)
-        self.insert_data_to_sql_server(transformed_df, 'PESSOAS')
-
-        # Processar e transformar dados da tabela ACIDENTES_TODAS_CAUSAS
-        transformed_df = self.process_and_transform_data('ACIDENTES_TODAS_CAUSAS', self.rename_columns_acidentes_todas_causas)
+        transformed_df = self.process_and_transform_data('ACIDENTES_TODAS_CAUSAS')
         self.insert_data_to_sql_server(transformed_df, 'ACIDENTES_TODAS_CAUSAS')
