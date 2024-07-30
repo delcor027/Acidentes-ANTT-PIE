@@ -4,6 +4,7 @@ from LayerBronze import LayerBronze
 from DataExtract import ExtractPRFOpenData, ExtractionComplete
 from LayerSilver import LayerSilver
 from LayerGold import LayerGold
+from dotenv import load_dotenv
 
 def main():
     """
@@ -15,6 +16,14 @@ def main():
     3. Processar e carregar os dados na camada silver.
     4. Copiar os dados da camada silver para a camada gold.
     """
+    # Carregar variáveis de ambiente do arquivo .env
+    load_dotenv()
+
+    db_driver = os.getenv("DB_DRIVER")
+    db_server = os.getenv("DB_SERVER")
+    db_database = os.getenv("DB_DATABASE")
+    db_trusted_connection = os.getenv("DB_TRUSTED_CONNECTION")
+
     # Etapa 1: Extrair e organizar os dados
     url = "https://www.gov.br/prf/pt-br/acesso-a-informacao/dados-abertos/dados-abertos-da-prf"
     extractor = ExtractPRFOpenData(url)
@@ -30,10 +39,10 @@ def main():
         "mssql+pyodbc",
         query={
             "odbc_connect": (
-                'DRIVER={ODBC Driver 17 for SQL Server};'
-                'SERVER=localhost;'
-                'DATABASE=PRF;'
-                'Trusted_Connection=yes;'
+                f'DRIVER={{{db_driver}}};'
+                f'SERVER={db_server};'
+                f'DATABASE={db_database};'
+                f'Trusted_Connection={db_trusted_connection};'
             )
         }
     )
